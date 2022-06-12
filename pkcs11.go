@@ -369,6 +369,17 @@ CK_RV Encrypt(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
 	return rv;
 }
 
+CK_RV EncryptFast(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
+	      CK_ULONG mlen, CK_BYTE_PTR enc, CK_ULONG enclen)
+{
+	if (enc == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+
+	return c->sym->C_Encrypt(session, message, mlen, enc, &enclen);
+}
+
+
 CK_RV EncryptUpdate(struct ctx * c, CK_SESSION_HANDLE session,
 		    CK_BYTE_PTR plain, CK_ULONG plainlen, CK_BYTE_PTR * cipher,
 		    CK_ULONG_PTR cipherlen)
@@ -421,6 +432,16 @@ CK_RV Decrypt(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR cipher,
 	}
 	e = c->sym->C_Decrypt(session, cipher, clen, *plain, plainlen);
 	return e;
+}
+
+CK_RV DecryptFast(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR cipher,
+	      CK_ULONG clen, CK_BYTE_PTR plain, CK_ULONG plainlen)
+{
+	if (plain == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+
+	return c->sym->C_Decrypt(session, cipher, clen, plain, &plainlen);
 }
 
 CK_RV DecryptUpdate(struct ctx * c, CK_SESSION_HANDLE session,
@@ -525,6 +546,17 @@ CK_RV Sign(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
 	rv = c->sym->C_Sign(session, message, mlen, *sig, siglen);
 	return rv;
 }
+
+CK_RV SignFast(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
+	   CK_ULONG mlen, CK_BYTE_PTR sig, CK_ULONG siglen)
+{
+	if (sig == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+
+	return c->sym->C_Sign(session, message, mlen, sig, &siglen);
+}
+
 
 CK_RV SignUpdate(struct ctx * c, CK_SESSION_HANDLE session,
 		 CK_BYTE_PTR message, CK_ULONG mlen)
@@ -1171,6 +1203,22 @@ func (c *Ctx) Encrypt(sh SessionHandle, message []byte) ([]byte, error) {
 	return s, nil
 }
 
+// EncryptFast directly encrypts single-part data without trying to learn result size
+func (c *Ctx) EncryptFast(sh SessionHandle, message []byte, cipherText []byte, maxLen uint) error {
+
+	e := C.EncryptFast(c.ctx,
+		C.CK_SESSION_HANDLE(sh),
+		cMessage(message),
+		C.CK_ULONG(len(message)),
+		cMessage(cipherText),
+		C.CK_ULONG(maxLen))
+	if toError(e) != nil {
+		return toError(e)
+	}
+
+	return nil
+}
+
 // EncryptUpdate continues a multiple-part encryption operation.
 func (c *Ctx) EncryptUpdate(sh SessionHandle, plain []byte) ([]byte, error) {
 	var (
@@ -1222,6 +1270,21 @@ func (c *Ctx) Decrypt(sh SessionHandle, cipher []byte) ([]byte, error) {
 	s := C.GoBytes(unsafe.Pointer(plain), C.int(plainlen))
 	C.free(unsafe.Pointer(plain))
 	return s, nil
+}
+
+// DecryptFast decrypts encrypted data in a single part without trying to learn result size
+func (c *Ctx) DecryptFast(sh SessionHandle, cipher []byte, cipherText []byte, maxLen uint) error {
+
+	e := C.DecryptFast(c.ctx,
+		C.CK_SESSION_HANDLE(sh),
+		cMessage(cipher),
+		C.CK_ULONG(len(cipher)),
+		cMessage(cipherText),
+		C.CK_ULONG(maxLen))
+	if toError(e) != nil {
+		return toError(e)
+	}
+	return nil
 }
 
 // DecryptUpdate continues a multiple-part decryption operation.
@@ -1336,6 +1399,22 @@ func (c *Ctx) Sign(sh SessionHandle, message []byte) ([]byte, error) {
 	s := C.GoBytes(unsafe.Pointer(sig), C.int(siglen))
 	C.free(unsafe.Pointer(sig))
 	return s, nil
+}
+
+// SignFast signs (encrypts with private key) data in a single part without trying to learn result size
+func (c *Ctx) SignFast(sh SessionHandle, message []byte, cipherText []byte, maxLen uint) error {
+
+	e := C.SignFast(c.ctx,
+		C.CK_SESSION_HANDLE(sh),
+		cMessage(message),
+		C.CK_ULONG(len(message)),
+		cMessage(cipherText),
+		C.CK_ULONG(maxLen))
+	if toError(e) != nil {
+		return toError(e)
+	}
+
+	return nil
 }
 
 // SignUpdate continues a multiple-part signature operation,
