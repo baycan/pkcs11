@@ -799,6 +799,28 @@ CK_RV WaitForSlotEvent(struct ctx * c, CK_FLAGS flags, CK_ULONG_PTR slot)
 	return e;
 }
 
+CK_RV PDS_ProcessAPS1Command(struct ctx * c, CK_SESSION_HANDLE session,
+                               CK_BYTE_PTR pRequest, CK_ULONG ulRequestLen,
+		               CK_BYTE_PTR* pResponse, CK_ULONG_PTR pulResponseLen)
+{
+	*pResponse = calloc(*pulResponseLen, sizeof(CK_BYTE));
+	if (*pResponse == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+	return c->sym->C_PDS_ProcessAPS1Command(session, pRequest, ulRequestLen, *pResponse, pulResponseLen);
+}
+
+CK_RV PDS_ProcessAPS2Command(struct ctx * c, CK_SESSION_HANDLE session,
+                               CK_BYTE_PTR pRequest, CK_ULONG ulRequestLen,
+		               CK_BYTE_PTR pResponse, CK_ULONG_PTR pulResponseLen)
+{
+	*pResponse = calloc(*pulResponseLen, sizeof(CK_BYTE));
+	if (*pResponse == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+	return c->sym->C_PDS_ProcessAPS2Command(session, pRequest, ulRequestLen, pResponse, pulResponseLen);
+}
+
 static inline CK_VOID_PTR getAttributePval(CK_ATTRIBUTE_PTR a)
 {
 	return a->pValue;
@@ -1687,4 +1709,39 @@ func (c *Ctx) waitForSlotEventHelper(f uint, sl chan SlotEvent) {
 	C.WaitForSlotEvent(c.ctx, C.CK_FLAGS(f), &slotID)
 	sl <- SlotEvent{uint(slotID)}
 	close(sl) // TODO(miek): Sending and then closing ...?
+}
+
+func (c *Ctx) ProcessAPS1Command(sh SessionHandle, request []byte) ([]byte, error) {
+
+	var (
+		response    C.CK_BYTE_PTR
+		responseLen C.CK_ULONG
+	)
+	e := C.PDS_ProcessAPS1Command(c.ctx,
+		C.CK_SESSION_HANDLE(sh),
+		C.CK_BYTE_PTR(unsafe.Pointer(&request[0])),
+		C.CK_ULONG(len(request)), &response, &responseLen)
+	if toError(e) != nil {
+		return nil, toError(e)
+	}
+	h := C.GoBytes(unsafe.Pointer(response), C.int(responseLen))
+	C.free(unsafe.Pointer(response))
+	return h, nil
+}
+
+func (c *Ctx) ProcessAPS2Command(sh SessionHandle, request []byte) ([]byte, error) {
+	var (
+		response    C.CK_BYTE_PTR
+		responseLen C.CK_ULONG
+	)
+	e := C.PDS_ProcessAPS2Command(c.ctx,
+		C.CK_SESSION_HANDLE(sh),
+		C.CK_BYTE_PTR(unsafe.Pointer(&request[0])),
+		C.CK_ULONG(len(request)), &response, &responseLen)
+	if toError(e) != nil {
+		return nil, toError(e)
+	}
+	h := C.GoBytes(unsafe.Pointer(response), C.int(responseLen))
+	C.free(unsafe.Pointer(response))
+	return h, nil
 }
